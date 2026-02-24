@@ -1,0 +1,300 @@
+# =============================================================================
+# AI와 함께 배우는 백엔드 실전 가이드 - 전체 실습 인프라
+# =============================================================================
+# 사용법:
+#   기본 (MySQL + Redis + App):  docker compose up -d
+#   모니터링 추가:               docker compose --profile monitoring up -d
+#   고가용성 실습:               docker compose --profile ha up -d
+#   외부연동 실습:               docker compose --profile external up -d
+#   보안 실습:                   docker compose --profile security up -d
+#   비동기 실습:                 docker compose --profile async up -d
+#   전체:                        docker compose --profile monitoring --profile ha --profile external --profile security --profile async up -d
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # 데이터 레이어
+  # ===========================================================================
+
+  # MySQL 8.0 - 메인 데이터베이스 (세션 02, 05, 07, 10, 12)
+  mysql:
+    image: mysql:8.0
+    container_name: grit-mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      MYSQL_DATABASE: backend_study
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infra/init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root1234}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend-net
+
+  # Redis 7 - 캐시 및 분산 락 (세션 01, 05, 12)
+  redis:
+    image: redis:7-alpine
+    container_name: grit-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-net
+
+  # RabbitMQ 3 - 메시지 브로커 (세션 04)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: grit-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP 프로토콜
+      - "15672:15672"  # Management UI (guest/guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    profiles:
+      - async
+    networks:
+      - backend-net
+
+  # ===========================================================================
+  # Spring Boot 애플리케이션
+  # ===========================================================================
+
+  # 메인 앱 서버 (포트 8080)
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: grit-app
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Spring DataSource
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/backend_study?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useUnicode=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      # Spring Redis
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      # Spring RabbitMQ
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-guest}
+      # Spring JPA
+      SPRING_JPA_HIBERNATE_DDL_AUTO: none
+      SPRING_JPA_SHOW_SQL: "true"
+      # Actuator (세션 13)
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      # Mock PG URL (세션 03)
+      MOCK_PG_URL: http://mock-pg:9000
+      # 서버 식별 (세션 06 로드밸런싱 확인용)
+      SERVER_ID: app-1
+    networks:
+      - backend-net
+
+  frontend:
+    profiles: ["ui"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_URL: http://app:8080
+    container_name: gritshop-frontend
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      API_URL: http://app:8080
+    depends_on:
+      - app
+    networks:
+      - backend-net
+
+  # 앱 레플리카 (세션 06 고가용성 실습용, 포트 8081)
+  app-replica:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: grit-app-replica
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/backend_study?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useUnicode=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-guest}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: none
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MOCK_PG_URL: http://mock-pg:9000
+      SERVER_ID: app-2
+    profiles:
+      - ha
+    networks:
+      - backend-net
+
+  # ===========================================================================
+  # 인프라 서비스
+  # ===========================================================================
+
+  # Nginx 로드밸런서 (세션 06 고가용성)
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: grit-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    profiles:
+      - ha
+    networks:
+      - backend-net
+
+  # ===========================================================================
+  # 모니터링 (세션 13 관찰가능성)
+  # ===========================================================================
+
+  # Prometheus - 메트릭 수집
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: grit-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+    networks:
+      - backend-net
+
+  # Grafana - 대시보드
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grit-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASS:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/red-dashboard.json
+    volumes:
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    profiles:
+      - monitoring
+    networks:
+      - backend-net
+
+  # ===========================================================================
+  # 실습 전용 서비스
+  # ===========================================================================
+
+  # 모의 PG API 서버 (세션 03 외부연동) - 랜덤 지연/실패 응답
+  mock-pg:
+    build:
+      context: ./infra/mock-pg
+      dockerfile: Dockerfile
+    container_name: grit-mock-pg
+    ports:
+      - "9000:9000"
+    environment:
+      # 실패 확률 (0.0 ~ 1.0)
+      FAILURE_RATE: "0.2"
+      # 최대 지연 시간 (밀리초)
+      MAX_DELAY_MS: "3000"
+    profiles:
+      - external
+    networks:
+      - backend-net
+
+  # 취약한 웹 앱 (세션 07 보안) - SQL Injection / XSS 실습용
+  vulnerable-app:
+    build:
+      context: ./infra/vulnerable-app
+      dockerfile: Dockerfile
+    container_name: grit-vulnerable-app
+    ports:
+      - "9999:9999"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: backend_study
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles:
+      - security
+    networks:
+      - backend-net
+
+# =============================================================================
+# 볼륨 정의
+# =============================================================================
+volumes:
+  mysql_data:
+    name: grit-mysql-data
+  redis_data:
+    name: grit-redis-data
+  rabbitmq_data:
+    name: grit-rabbitmq-data
+  prometheus_data:
+    name: grit-prometheus-data
+  grafana_data:
+    name: grit-grafana-data
+
+# =============================================================================
+# 네트워크 정의
+# =============================================================================
+networks:
+  backend-net:
+    name: grit-backend-net
+    driver: bridge
