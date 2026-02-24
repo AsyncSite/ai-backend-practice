@@ -1,0 +1,15 @@
+{
+  "name": "vulnerable-app",
+  "version": "1.0.0",
+  "description": "보안 취약점 학습용 웹 애플리케이션 (교육 목적 전용)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.6.5"
+  },
+  "author": "",
+  "license": "MIT"
+}
