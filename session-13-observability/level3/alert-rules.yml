@@ -1,0 +1,207 @@
+# =============================================================================
+# [Session 13 - Level 3] Prometheus 알림 규칙 직접 작성
+# =============================================================================
+# RED 메서드 기반 알림 규칙을 직접 설계합니다.
+#
+# RED 메서드:
+#   - Rate: 초당 요청 수 (트래픽 변화 감지)
+#   - Errors: 에러율 (서비스 안정성)
+#   - Duration: 응답 시간 (사용자 경험)
+#
+# 알림 규칙 구성 요소:
+#   - alert: 알림 이름
+#   - expr: PromQL 표현식 (조건)
+#   - for: 조건 지속 시간 (일시적 스파이크 무시)
+#   - labels: 심각도 등 메타데이터
+#   - annotations: 알림 메시지
+#
+# 테스트 방법:
+#   1. 이 파일을 완성한 후 infra/prometheus/ 에 복사
+#   2. docker compose --profile monitoring up -d
+#   3. http://localhost:9090/alerts 에서 알림 상태 확인
+#
+# TODO: 아래의 TODO 부분을 채워서 알림 규칙을 완성하세요.
+# =============================================================================
+
+groups:
+  - name: backend-custom-alerts
+    rules:
+
+      # =====================================================================
+      # Rate (요청 수) 관련 알림
+      # =====================================================================
+
+      # TODO 1: 트래픽 급증 알림을 작성하세요
+      #
+      # 조건: 5분간 초당 요청 수가 100을 초과하면 경고
+      #
+      # PromQL 해설:
+      #   sum(rate(http_server_requests_seconds_count[5m]))
+      #   - http_server_requests_seconds_count: HTTP 요청 총 횟수 (카운터)
+      #   - rate(...[5m]): 5분간 초당 변화율 (카운터 -> 비율 변환)
+      #   - sum(): 모든 엔드포인트의 합계
+      #
+      # 힌트:
+      #   - alert: HighTrafficRate
+      #     expr: |
+      #       sum(rate(http_server_requests_seconds_count[5m])) > 100
+      #     for: 3m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "트래픽이 급증했습니다"
+      #       description: "현재 초당 요청 수: {{ $value | humanize }}rps"
+
+
+      # TODO 2: 트래픽 급감 알림 (서비스 장애 가능성)
+      #
+      # 조건: 5분간 요청이 거의 없으면 경고 (서비스가 죽었을 수 있음)
+      #
+      # 힌트:
+      #   - alert: LowTrafficRate
+      #     expr: |
+      #       sum(rate(http_server_requests_seconds_count[5m])) < 0.1
+      #     for: 5m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "트래픽이 비정상적으로 낮습니다"
+      #       description: "서비스 장애 가능성을 확인하세요. 현재: {{ $value | humanize }}rps"
+
+
+      # =====================================================================
+      # Errors (에러율) 관련 알림
+      # =====================================================================
+
+      # TODO 3: 에러율 경고 알림을 작성하세요
+      #
+      # 조건: 5분간 에러율(5xx)이 5%를 초과하면 경고
+      #
+      # PromQL 해설:
+      #   분자: status=~"5.." (5xx 에러)의 초당 요청 수
+      #   분모: 전체 초당 요청 수
+      #   결과: 에러율 (0.0 ~ 1.0)
+      #
+      # 힌트:
+      #   - alert: HighErrorRate
+      #     expr: |
+      #       sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+      #       /
+      #       sum(rate(http_server_requests_seconds_count[5m]))
+      #       > 0.05
+      #     for: 2m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "에러율이 5%를 초과했습니다"
+      #       description: "최근 5분간 에러율: {{ $value | humanizePercentage }}"
+
+
+      # TODO 4: 에러율 긴급 알림을 작성하세요
+      #
+      # 조건: 에러율이 20%를 초과하면 긴급
+      #
+      # 힌트:
+      #   - alert: CriticalErrorRate
+      #     expr: |
+      #       sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+      #       /
+      #       sum(rate(http_server_requests_seconds_count[5m]))
+      #       > 0.20
+      #     for: 1m
+      #     labels:
+      #       severity: critical
+      #     annotations:
+      #       summary: "[긴급] 에러율이 20%를 초과했습니다!"
+      #       description: "즉시 확인 필요. 에러율: {{ $value | humanizePercentage }}"
+
+
+      # =====================================================================
+      # Duration (응답 시간) 관련 알림
+      # =====================================================================
+
+      # TODO 5: 응답 시간 경고 알림을 작성하세요
+      #
+      # 조건: p99 응답 시간이 3초를 초과하면 경고
+      #
+      # PromQL 해설:
+      #   histogram_quantile(0.99, ...): 99번째 백분위수 계산
+      #   - 100개의 요청 중 99번째로 느린 요청의 응답 시간
+      #   - p99 > 3s: 1%의 사용자가 3초 이상 대기
+      #
+      # 힌트:
+      #   - alert: HighLatencyP99
+      #     expr: |
+      #       histogram_quantile(0.99,
+      #         sum(rate(http_server_requests_seconds_bucket[5m])) by (le)
+      #       ) > 3
+      #     for: 5m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "p99 응답 시간이 3초를 초과했습니다"
+      #       description: "현재 p99: {{ $value }}초"
+
+
+      # TODO 6: 평균 응답 시간 알림을 작성하세요
+      #
+      # 조건: 평균 응답 시간이 1초를 초과하면 경고
+      #
+      # PromQL 해설:
+      #   sum / count = 평균
+      #   http_server_requests_seconds_sum: 총 응답 시간
+      #   http_server_requests_seconds_count: 총 요청 수
+      #
+      # 힌트:
+      #   - alert: HighAverageLatency
+      #     expr: |
+      #       sum(rate(http_server_requests_seconds_sum[5m]))
+      #       /
+      #       sum(rate(http_server_requests_seconds_count[5m]))
+      #       > 1
+      #     for: 5m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "평균 응답 시간이 1초를 초과했습니다"
+      #       description: "현재 평균: {{ $value }}초"
+
+
+      # =====================================================================
+      # 인프라 관련 알림
+      # =====================================================================
+
+      # TODO 7: 앱 서버 다운 알림을 작성하세요
+      #
+      # 조건: Prometheus가 앱 서버에서 메트릭을 수집할 수 없으면 긴급
+      #   up == 0: 스크래핑 실패 (서버 다운)
+      #
+      # 힌트:
+      #   - alert: AppServerDown
+      #     expr: up{job=~"spring-boot.*"} == 0
+      #     for: 1m
+      #     labels:
+      #       severity: critical
+      #     annotations:
+      #       summary: "앱 서버가 다운되었습니다"
+      #       description: "{{ $labels.instance }} 서버가 1분 이상 응답하지 않습니다"
+
+
+      # TODO 8: 커스텀 비즈니스 메트릭 알림 (심화)
+      #
+      # 조건: 결제 실패율이 10%를 초과하면 경고
+      # (MetricsConfig.java에서 정의한 커스텀 메트릭 사용)
+      #
+      # 힌트:
+      #   - alert: HighPaymentFailureRate
+      #     expr: |
+      #       sum(rate(payments_total{status="failed"}[5m]))
+      #       /
+      #       (sum(rate(payments_total{status="success"}[5m])) + sum(rate(payments_total{status="failed"}[5m])))
+      #       > 0.10
+      #     for: 3m
+      #     labels:
+      #       severity: warning
+      #     annotations:
+      #       summary: "결제 실패율이 10%를 초과했습니다"
+      #       description: "PG사 장애 가능성을 확인하세요. 실패율: {{ $value | humanizePercentage }}"

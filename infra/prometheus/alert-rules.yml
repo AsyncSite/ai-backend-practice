@@ -1,0 +1,50 @@
+# =============================================================================
+# Prometheus 알림 규칙 (세션 13: 관찰가능성)
+# =============================================================================
+# RED 메서드 기반 알림:
+# - Rate: 요청 수 이상
+# - Errors: 에러율 임계치 초과
+# - Duration: 응답 시간 임계치 초과
+# =============================================================================
+
+groups:
+  - name: backend-alerts
+    rules:
+      # --- 에러율 알림 (세션 13 L2) ---
+      # 5분간 에러율이 5%를 초과하면 경고
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count[5m]))
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "에러율이 5%를 초과했습니다"
+          description: "최근 5분간 에러율: {{ $value | humanizePercentage }}"
+
+      # --- 응답 시간 알림 ---
+      # p99 응답 시간이 3초를 초과하면 경고
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_server_requests_seconds_bucket[5m])) by (le)
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 응답 시간이 3초를 초과했습니다"
+          description: "현재 p99: {{ $value }}초"
+
+      # --- 앱 서버 다운 알림 ---
+      - alert: AppServerDown
+        expr: up{job=~"spring-boot.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "앱 서버가 다운되었습니다"
+          description: "{{ $labels.instance }} 서버가 1분 이상 응답하지 않습니다"

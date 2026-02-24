@@ -1,0 +1,39 @@
+# =============================================================================
+# Prometheus 설정 (세션 13: 관찰가능성)
+# =============================================================================
+# Spring Boot Actuator가 노출하는 /actuator/prometheus 엔드포인트에서
+# 메트릭을 수집합니다.
+# =============================================================================
+
+global:
+  scrape_interval: 15s       # 15초마다 메트릭 수집
+  evaluation_interval: 15s   # 15초마다 알림 규칙 평가
+
+# 알림 규칙 파일
+rule_files:
+  - "alert-rules.yml"
+
+# 메트릭 수집 대상
+scrape_configs:
+  # Prometheus 자체 메트릭
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Spring Boot 앱 서버 (메인)
+  - job_name: 'spring-boot-app'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['app:8080']
+        labels:
+          instance: 'app-1'
+
+  # Spring Boot 앱 서버 (레플리카, 세션 06)
+  - job_name: 'spring-boot-replica'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['app-replica:8080']
+        labels:
+          instance: 'app-2'
