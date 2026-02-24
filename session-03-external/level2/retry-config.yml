@@ -1,0 +1,123 @@
+# [Session 03 - Level 2] Resilience4j Retry 설정 예시
+#
+# application.yml에 추가하여 재시도 동작을 변경할 수 있습니다.
+# 아래 설정을 복사하여 app/src/main/resources/application.yml에 붙여넣으세요.
+
+resilience4j:
+  retry:
+    instances:
+      paymentService:
+        # TODO: max-attempts를 3에서 5로 변경하여 재시도 횟수를 늘려보세요
+        max-attempts: 3  # 재시도 횟수 (첫 시도 포함)
+
+        # TODO: wait-duration을 1s에서 500ms로 변경하여 재시도 간격을 줄여보세요
+        wait-duration: 1s  # 재시도 간격 (고정)
+
+        # 재시도할 예외 타입
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.SocketTimeoutException
+
+        # 재시도하지 않을 예외 타입
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+
+
+# ============================================
+# 💡 실험 시나리오
+# ============================================
+#
+# 1. 기본 설정 (max-attempts: 3, wait-duration: 1s)
+#    - 총 대기 시간: 최대 2초 (1초 × 2번 재시도)
+#    - 성공률: 약 60%
+#
+# 2. 재시도 횟수 증가 (max-attempts: 5)
+#    - 총 대기 시간: 최대 4초
+#    - 성공률: 약 80%
+#    - 트레이드오프: 성공률 ↑, 응답 시간 ↑
+#
+# 3. 재시도 간격 감소 (wait-duration: 500ms)
+#    - 총 대기 시간: 최대 2초 (0.5초 × 4번)
+#    - 더 빠르게 재시도 시도
+#    - 주의: 외부 API에 부하 증가
+#
+# 4. 지수 백오프 적용 (아래 고급 설정 참고)
+#    - 재시도 간격이 점점 증가 (1초 -> 2초 -> 4초)
+#    - 외부 시스템 복구 시간 확보
+
+
+# ============================================
+# 고급 설정: 지수 백오프 (Exponential Backoff)
+# ============================================
+#
+# resilience4j:
+#   retry:
+#     instances:
+#       paymentService:
+#         max-attempts: 5
+#         wait-duration: 1s
+#         enable-exponential-backoff: true  # 지수 백오프 활성화
+#         exponential-backoff-multiplier: 2  # 2배씩 증가
+#         # 1초 -> 2초 -> 4초 -> 8초
+
+
+# ============================================
+# 고급 설정: 재시도 조건 커스터마이징
+# ============================================
+#
+# Java 코드로 재시도 조건을 세밀하게 제어:
+#
+# @Bean
+# public RetryConfig retryConfig() {
+#     return RetryConfig.custom()
+#         .maxAttempts(3)
+#         .waitDuration(Duration.ofSeconds(1))
+#         .retryOnResult(response ->
+#             ((ResponseEntity<?>) response).getStatusCode().is5xxServerError()
+#         )
+#         .retryExceptions(IOException.class, TimeoutException.class)
+#         .ignoreExceptions(IllegalArgumentException.class)
+#         .build();
+# }
+
+
+# ============================================
+# 💡 재시도 전략 선택 가이드
+# ============================================
+#
+# 고정 간격 (Fixed):
+#   - 사용: 간단한 일시적 실패 (네트워크 지연)
+#   - 예: wait-duration: 1s
+#
+# 지수 백오프 (Exponential):
+#   - 사용: 외부 시스템 과부하 시
+#   - 예: 1s -> 2s -> 4s
+#   - 장점: 외부 시스템 복구 시간 확보
+#
+# 지터 포함 (Jitter):
+#   - 사용: 다수의 클라이언트가 동시 재시도 시
+#   - 예: 1s ± 랜덤(200ms)
+#   - 장점: 재시도 분산 (Thundering Herd 방지)
+
+
+# ============================================
+# 💡 테스트 방법
+# ============================================
+#
+# 1. 설정 변경 후 앱 재시작:
+#    docker compose up -d --build app
+#
+# 2. 결제 API 호출:
+#    curl -X POST http://localhost:8080/api/payments \
+#      -H "Content-Type: application/json" \
+#      -d '{"amount": 25000, "orderId": 1}'
+#
+# 3. 로그에서 재시도 확인:
+#    docker logs grit-app --tail 50 | grep -i retry
+#
+# 4. 성공률 측정:
+#    for i in {1..20}; do
+#      curl -X POST http://localhost:8080/api/payments \
+#        -H "Content-Type: application/json" \
+#        -d "{\"amount\": 25000, \"orderId\": $i}"
+#    done | grep -c "success"
