@@ -1,0 +1,33 @@
+// =============================================================================
+// AI와 함께 배우는 백엔드 실전 가이드 - 루트 Gradle 빌드 설정
+// =============================================================================
+// 이 파일은 멀티모듈 프로젝트의 루트 빌드 파일입니다.
+// 실제 의존성과 플러그인은 app/build.gradle에서 관리합니다.
+// =============================================================================
+
+plugins {
+    id 'org.springframework.boot' version '3.2.0' apply false
+    id 'io.spring.dependency-management' version '1.1.4' apply false
+}
+
+// 모든 서브모듈에 공통 설정 적용
+subprojects {
+    group = 'com.gritmoments'
+    version = '0.0.1-SNAPSHOT'
+
+    apply plugin: 'java'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    // 공통 테스트 설정
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}

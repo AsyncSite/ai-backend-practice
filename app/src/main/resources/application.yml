@@ -1,0 +1,116 @@
+# =============================================================================
+# Spring Boot 애플리케이션 설정
+# =============================================================================
+# 각 설정이 어떤 세션과 관련되는지 주석으로 표시했습니다.
+# 환경 변수로 오버라이드할 수 있습니다 (docker-compose.yml 참고).
+# =============================================================================
+
+spring:
+  application:
+    name: backend-practice
+
+  # --- 세션 02: 데이터베이스 ---
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/backend_study?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root1234}
+    hikari:
+      # 커넥션 풀 설정 (세션 02에서 상세 실습)
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000    # 30초
+      idle-timeout: 600000         # 10분
+      max-lifetime: 1800000        # 30분
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        format_sql: true
+        # N+1 문제 방지를 위한 기본 배치 사이즈 (세션 02)
+        default_batch_fetch_size: 100
+    open-in-view: false
+
+  # --- 세션 01: Redis 캐시 ---
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000         # 기본 TTL 5분 (밀리초)
+      cache-null-values: false
+
+  # --- 세션 04: RabbitMQ 비동기 ---
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+  # --- 세션 07: Spring Security ---
+  security:
+    # 개발 환경에서는 기본 보안을 비활성화하고,
+    # 세션 07에서 JWT 기반 인증을 직접 구현합니다.
+    user:
+      name: admin
+      password: admin
+
+# --- 서버 설정 ---
+server:
+  port: 8080
+  # 서버 식별용 (세션 06 로드밸런싱 확인)
+  id: ${SERVER_ID:app-local}
+
+# --- 세션 03: 외부 연동 설정 ---
+mock-pg:
+  url: ${MOCK_PG_URL:http://localhost:9000}
+
+# --- 세션 03: Resilience4j 서킷 브레이커 ---
+resilience4j:
+  circuitbreaker:
+    instances:
+      paymentService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-type: COUNT_BASED
+  retry:
+    instances:
+      paymentService:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+
+# --- 세션 07: JWT 설정 ---
+jwt:
+  secret: ${JWT_SECRET:grit-moments-jwt-secret-key-for-study-only}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+
+# --- 세션 13: Actuator + Micrometer ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,metrics,prometheus}
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# --- 로깅 ---
+logging:
+  level:
+    root: INFO
+    com.gritmoments.backend: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

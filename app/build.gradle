@@ -1,0 +1,66 @@
+// =============================================================================
+// Spring Boot 메인 애플리케이션 - 빌드 설정
+// =============================================================================
+// 세션별로 필요한 의존성이 모두 포함되어 있습니다.
+// 각 세션에서 어떤 의존성을 사용하는지 주석으로 표시했습니다.
+// =============================================================================
+
+plugins {
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+dependencies {
+    // === 세션 전체: Spring Boot 기본 ===
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // === 세션 02, 05, 10: 데이터베이스 (Spring Data JPA + MySQL) ===
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // === 세션 01, 05: 캐시 (Redis) ===
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+
+    // === 세션 04: 비동기 메시지 (RabbitMQ) ===
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // === 세션 07: 보안 (Spring Security + JWT) ===
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+
+    // === 세션 03: 외부 연동 (Resilience4j) ===
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'org.springframework.retry:spring-retry'
+
+    // === 세션 05: 분산 락 (Redisson) ===
+    implementation 'org.redisson:redisson-spring-boot-starter:3.25.0'
+
+    // === 세션 12: API 문서화 (SpringDoc OpenAPI) ===
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+
+    // === 세션 12: Rate Limiting (Bucket4j) ===
+    implementation 'com.bucket4j:bucket4j-core:8.7.0'
+
+    // === 세션 13: 관찰가능성 (Actuator + Micrometer) ===
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // === Lombok (보일러플레이트 코드 감소) ===
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // === 테스트 ===
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.springframework.amqp:spring-rabbit-test'
+}
+
+// Gradle Wrapper 설정
+tasks.named('bootJar') {
+    archiveFileName = 'backend-practice.jar'
+}

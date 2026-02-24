@@ -1,0 +1,33 @@
+# Build
+build/
+.gradle/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
+
+# Docker volumes
+mysql-data/
+redis-data/
+
+# Environment
+.env
+!.env.example
+
+# Local override
+docker-compose.override.yml
+
+# Logs
+*.log
