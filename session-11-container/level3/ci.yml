@@ -1,0 +1,108 @@
+# [Session 11 - Level 3] GitHub Actions CI/CD 파이프라인
+#
+# .github/workflows/ci.yml 파일로 저장하세요.
+
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  # ============================================
+  # Job 1: 테스트
+  # ============================================
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v3
+
+      - name: JDK 17 설치
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # TODO 1: Gradle 캐싱 설정
+      # - name: Gradle 캐시
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: |
+      #       ~/.gradle/caches
+      #       ~/.gradle/wrapper
+      #     key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+
+      - name: 테스트 실행
+        run: |
+          cd app
+          ./gradlew test
+
+      # TODO 2: 테스트 커버리지 리포트
+      # - name: 테스트 커버리지 업로드
+      #   uses: codecov/codecov-action@v3
+
+  # ============================================
+  # Job 2: Docker 이미지 빌드 (main 브랜치만)
+  # ============================================
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v3
+
+      # TODO 3: Docker Buildx 설정 (멀티 플랫폼 빌드)
+      # - name: Docker Buildx 설정
+      #   uses: docker/setup-buildx-action@v2
+
+      - name: Docker 이미지 빌드
+        run: |
+          cd app
+          docker build -t backend-practice:${{ github.sha }} .
+          docker tag backend-practice:${{ github.sha }} backend-practice:latest
+
+      # TODO 4: Docker Hub 로그인 및 푸시
+      # - name: Docker Hub 로그인
+      #   uses: docker/login-action@v2
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+      #
+      # - name: Docker 이미지 푸시
+      #   run: |
+      #     docker push backend-practice:${{ github.sha }}
+      #     docker push backend-practice:latest
+
+  # ============================================
+  # TODO 5: 배포 Job (선택사항)
+  # ============================================
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   if: github.ref == 'refs/heads/main'
+  #
+  #   steps:
+  #     - name: SSH로 서버 접속 및 배포
+  #       uses: appleboy/ssh-action@v0.1.7
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }}
+  #         username: ${{ secrets.SERVER_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           docker pull backend-practice:latest
+  #           docker compose up -d --build
+
+# ============================================
+# 💡 GitHub Secrets 설정 (Repository Settings)
+# ============================================
+# DOCKER_USERNAME: Docker Hub 사용자명
+# DOCKER_PASSWORD: Docker Hub 액세스 토큰
+# SERVER_HOST: 배포 서버 IP
+# SERVER_USER: SSH 사용자명
+# SSH_PRIVATE_KEY: SSH 프라이빗 키
